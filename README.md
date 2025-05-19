@@ -1,90 +1,110 @@
+# rag-ingest
 
-# Setup
+## Overview
 
-cd C:\Users\akram\OneDrive\Documents\Workspace\AI
+**rag-ingest** is a simple pipeline for ingestion of documents into a vector store and serving them for retrieval-augmented generation (RAG). I am using this project to ingest the user manuals of all devices in my house and then chat with Llama 3.1 for troubleshooting any issues I have. I created this repo for educational purpose only, CPUs are not as efficient as GPUs when it comes to inference so for a real use-case it makes sense to work with CUDA cores for siginifcant performance gains.
 
-mkdir rag-ingest
+This project allows you to:
 
-cd rag-ingest
+- Prepare and convert language models to the **gguf** format.
+- Split and embed text documents using CPU-agnostic libraries.
+- Store embeddings in a vector store for fast similarity search.
 
-mkdir models
+## Goals
 
-python -m venv .venv
+1. **CPU-Agnostic**: Use libraries that run efficiently on any CPU without requiring GPU acceleration.
+2. **Modular Pipeline**: Separate steps for model preparation, document ingestion, and query serving.
+3. **Reproducible**: Clear instructions to download models, convert formats, and ingest data.
 
-.\.venv\Scripts\Activate.ps1
+## Requirements
 
-pip install -r requirements.txt
+- Python 3.8+
+- [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) (for gguf model loading)
+- [sentence-transformers](https://www.sbert.net/) or [transformers](https://github.com/huggingface/transformers) (CPU mode)
+- [faiss-cpu](https://github.com/facebookresearch/faiss) or [chromadb](https://github.com/chroma-core/chroma)
+- Hugging Face CLI (`huggingface_hub`)
 
-OR
-pip install langchain
-pip install llama-cpp-python        # for local Llama-style models
-pip install sentence-transformers   # for embeddings
-pip install faiss-cpu               # vector store
-pip install PyPDF2                  # PDF text extraction
-pip install tiktoken                # chunking on token bounds
-pip install gradio                  # simple UI
+## Model Preparation
 
-** Note: If you prefer an alternative to FAISS, you can swap in Chroma or Weaviate.
+The below instructions are generic so you can download the model of your choosing. I went for Llama 3.1 8B where I downloaded the model files then converted it to gguf format. I tracked the instructions for my own setup in SETUP.md.
 
-# Prerequisites to llama.cpp
-1. Install libcurl (via vcpkg)
-- Clone & bootstrap vcpkg:
-git clone https://github.com/microsoft/vcpkg.git C:\Users\akram\OneDrive\Apps\vcpkg
-cd C:\Users\akram\OneDrive\Apps\vcpkg
-.\bootstrap-vcpkg.bat
+1. **Get a pre-trained model**  
+   ```bash
+   pip install huggingface_hub
+   huggingface-cli login
+   huggingface-cli repo clone <model-id> ./model
+   ```
 
-2. Install curl for x64:
-cd C:\Users\akram\OneDrive\Apps\vcpkg
-.\vcpkg.exe install curl:x64-windows
+2. **Convert to GGUF**  
+   GGUF is the llama.cpp “general-purpose” file format for quantized inference.  
+   ```bash
+   git clone https://github.com/ggerganov/llama.cpp
+   cd llama.cpp
+   # build the converter
+   make
+   # convert
+   ./convert-ggml-to-gguf models/<model>.bin models/<model>.gguf
+   ```
 
-# Model
-1. Go to https://huggingface.co/datasets/meta-llama/Llama-3.1-8B-Instruct-evals
-Accept the license to download the model. You should receive an email with download link if request is approved.
+## What is GGUF?
 
-2. Tell CMake where vcpkg lives (once per machine)
-set VCPKG_ROOT=C:\Users\akram\OneDrive\Apps\vcpkg
-set CMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+**GGUF** is a binary format optimized for the [llama.cpp](https://github.com/ggerganov/llama.cpp) runtime. It supports quantized weights, fast loading, and is CPU-friendly.
 
-3. Clone and build llama.cpp
-cd C:\Users\akram\OneDrive\Documents\Workspace\AI
-git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
-mkdir build
-cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE="C:/Users/akram/OneDrive/Apps/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET="x64-windows" -DCURL_INCLUDE_DIR="C:/Users/akram/OneDrive/Apps/vcpkg/installed/x64-windows/include" -DCURL_LIBRARY="C:/Users/akram/OneDrive/Apps/vcpkg/installed/x64-windows/lib/libcurl.lib"
+## Document Ingestion & Vector Store
 
-cmake --build . --config Release
+1. **Text Splitting**  
+   Use a library like `langchain` or `nltk` to split large documents into smaller chunks.
 
-4. Download the model
-- Install LFS
-git lfs install
+2. **Embedding**  
+   Compute embeddings with `sentence-transformers` or `transformers` in CPU mode:
+   ```python
+   from transformers import AutoTokenizer, AutoModel
+   tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+   model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+   ```
 
-- Clone the llama3.1 repo
-cd C:\Users\akram\OneDrive\Documents\Workspace\AI
+3. **Vector Store**  
+   Store embeddings using FAISS or Chroma:
+   ```python
+   import faiss
+   index = faiss.IndexFlatL2(embeddings.shape[1])
+   index.add(embeddings)
+   ```
 
-Clone the repo (prompts for a HuggingFace Access Token):
-git clone https://huggingface.co/meta-llama/Llama-3.1-8B
+## What is a Vector Store?
 
-(or download the files manually from https://huggingface.co/meta-llama/Llama-3.1-8B/tree/main)
+A **vector store** is a database of numeric embeddings that supports fast similarity search. It allows you to retrieve the most relevant document chunks given a query embedding.
 
-cd Llama-3.1-8B
+## Pipeline Flow
 
-Authenticate to Hugging Face (Make sure hugging face cli is installed pip install -U "huggingface_hub[cli]"):
-huggingface-cli login
+```mermaid
+flowchart TB
+  subgraph Model Preparation
+    A[Download HF Model] --> B[Convert to GGUF]
+    B --> C[Load GGUF Model]
+  end
+  subgraph Ingestion
+    D[Raw Documents] --> E[Text Splitting]
+    E --> F[Compute Embeddings]
+    F --> G[Store Embeddings in Vector Store]
+  end
+  subgraph Query
+    H[User Query] --> I[Embed Query]
+    I --> J[Vector Store Lookup]
+    J --> K[Retrieve Chunks]
+    K --> L[LLM Inference (gguf)]
+    L --> M[Answer]
+  end
+```
 
-Fetch the actual weight files via LFS:
-git lfs pull
+## Usage
 
-5. Convert to GGUF (or legacy GGML) format (run from inside llama.cpp repo):
-python .\convert_hf_to_gguf.py `
-  C:\Users\akram\OneDrive\Documents\Workspace\AI\Llama-3.1-8B `
-  --outfile llama-3.1-8B.gguf
+1. Clone this repo:
+   ```bash
+   git clone https://github.com/akram0zaki/rag-ingest.git
+   cd rag-ingest
+   ```
+2. Follow **Model Preparation** and **Document Ingestion** steps above.
+3. Run your query script pointing at the vector store and gguf model.
 
-6. (OR) Download a pre-converted model:
-git lfs install
-git clone https://huggingface.co/TheBloke/Llama-2-7B-chat-GGUF
-
-7. Point llama-cpp-python at the new model. In chat.py, set:
-MODEL_PATH = "C:/Users/akram/OneDrive/Documents/Workspace/AI/llama.cpp/llama-3.1-8B.gguf"  # or .bin, whichever you produced
-llm = LlamaCpp(model_path=MODEL_PATH, n_ctx=2048)
-
+---
