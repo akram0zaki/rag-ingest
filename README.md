@@ -79,21 +79,26 @@ A **vector store** is a database of numeric embeddings that supports fast simila
 
 ```mermaid
 flowchart TB
-  subgraph Model Preparation
-    A[Download HF Model] --> B[Convert to GGUF]
-    B --> C[Load GGUF Model]
+  %% Model prep
+  subgraph ModelPrep["Model Preparation"]
+    A["Download HF Model"] --> B["Convert to GGUF"]
+    B --> C["Load GGUF Model"]
   end
-  subgraph Ingestion
-    D[Raw Documents] --> E[Text Splitting]
-    E --> F[Compute Embeddings]
-    F --> G[Store Embeddings in Vector Store]
+
+  %% Document ingestion
+  subgraph Ingest["Ingestion"]
+    D["Raw Documents"] --> E["Text Splitting"]
+    E --> F["Compute Embeddings"]
+    F --> G["Store Embeddings in Vector Store"]
   end
-  subgraph Query
-    H[User Query] --> I[Embed Query]
-    I --> J[Vector Store Lookup]
-    J --> K[Retrieve Chunks]
-    K --> L[LLM Inference (gguf)]
-    L --> M[Answer]
+
+  %% User query path
+  subgraph Query["Query"]
+    H["User Query"] --> I["Embed Query"]
+    I --> J["Vector Store Lookup"]
+    J --> K["Retrieve Chunks"]
+    K --> L["LLM Inference (gguf)"]
+    L --> M["Answer"]
   end
 ```
 
