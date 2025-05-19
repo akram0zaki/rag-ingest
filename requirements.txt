@@ -1,0 +1,10 @@
+langchain
+langchain_community
+llama-cpp-python
+sentence-transformers
+faiss-cpu
+PyPDF2
+tiktoken
+gradio
+sentencepiece
+pycryptodome
