@@ -8,3 +8,4 @@ tiktoken
 gradio
 sentencepiece
 pycryptodome
+docarray[hnswlib]
